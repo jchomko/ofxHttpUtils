@@ -73,7 +73,8 @@ void ofxHttpUtils::start() {
 
 // ----------------------------------------------------------------------
 void ofxHttpUtils::stop() {
-    stopThread();
+//    stopThread();
+    waitForThread(true,5000);
     condition.signal();
 }
 
