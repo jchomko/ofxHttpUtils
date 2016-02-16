@@ -36,6 +36,8 @@ bool ofxHttpUtils::initialized = false;
 // ----------------------------------------------------------------------
 ofxHttpUtils::ofxHttpUtils(){
     timeoutSeconds = 2;
+    maxRetries = -1; // -1 means an infinite number of retries
+    nbOfTries = 0;
     verbose = true;
     sendCookies = true;
     //start();
@@ -95,7 +97,20 @@ void ofxHttpUtils::threadedFunction(){
 				response = getUrl(url);
 			}
     		lock();
-			if(response.status!=-1) forms.pop();
+            if(response.status!=-1) {
+                nbOfTries = 0;
+                forms.pop();
+            }
+            else if (maxRetries >= 0) {
+                nbOfTries++;
+                ofLogWarning("ofxHttpUtils") << "The resquest did not succeed. We will try again " << maxRetries - nbOfTries << " time(s)";
+                if (nbOfTries >= maxRetries) {
+                    ofLogError("ofxHttpUtils") << "We pop that resquest. Too much retries -- " << form.action.c_str();
+                    nbOfTries = 0;
+                    forms.pop();
+                }
+            }
+            
     	}
     	if(forms.empty()){
     	    ofLogVerbose("ofxHttpUtils") << "empty, waiting";
@@ -136,6 +151,7 @@ string ofxHttpUtils::generateUrl(ofxHttpForm & form) {
     return url;
 }
 
+// ----------------------------------------------------------------------
 ofxHttpResponse ofxHttpUtils::postData(string url, const ofBuffer & data,  string contentType){
 	ofxHttpResponse response;
 	try{
@@ -193,7 +209,7 @@ ofxHttpResponse ofxHttpUtils::postData(string url, const ofBuffer & data,  strin
 		ofNotifyEvent(newResponseEvent, response, this);
 	}catch (Exception& exc){
 
-    	ofLogError("ofxHttpUtils") << "ofxHttpUtils error postData--";
+    	ofLogError("ofxHttpUtils") << "ofxHttpUtils error postData --";
 
         //ofNotifyEvent(notifyNewError, "time out", this);
 
@@ -210,6 +226,7 @@ ofxHttpResponse ofxHttpUtils::postData(string url, const ofBuffer & data,  strin
 // ----------------------------------------------------------------------
 ofxHttpResponse ofxHttpUtils::doPostForm(ofxHttpForm & form){
 	ofxHttpResponse response;
+    
     try{
         URI uri( form.action.c_str() );
         std::string path(uri.getPathAndQuery());
@@ -230,10 +247,12 @@ ofxHttpResponse ofxHttpUtils::doPostForm(ofxHttpForm & form){
         HTTPResponse res;
 		HTMLForm pocoForm;
 		// create the form data to send
-	    if(form.formFiles.size()>0)
+        if(form.formFiles.size()>0) {
 			pocoForm.setEncoding(HTMLForm::ENCODING_MULTIPART);
-		else
+        }
+        else {
 			pocoForm.setEncoding(HTMLForm::ENCODING_URL);
+        }
 
 		// form values
 		for(unsigned i=0; i<form.formIds.size(); i++){
@@ -283,9 +302,8 @@ ofxHttpResponse ofxHttpUtils::doPostForm(ofxHttpForm & form){
 
 
     }catch (Exception& exc){
-
-    	ofLogError("ofxHttpUtils") << "ofxHttpUtils error doPostForm--";
-
+    	ofLogError("ofxHttpUtils") << "ofxHttpUtils error doPostForm -- " << form.action.c_str();
+        
         //ofNotifyEvent(notifyNewError, "time out", this);
 
         // for now print error, need to broadcast a response
